@@ -118,12 +118,12 @@ export async function clashToLink(yamlText: string): Promise<ConvertResult> {
       .flat()
       .filter(Boolean);
 
-    // 去重（按 name + server + port）
+    // 去重（按 type + name + server + port）
     const seen = new Set<string>();
     const proxies: any[] = [];
     for (const node of candidates) {
       if (node?.name && node?.server && node?.port) {
-        const key = `${node.name}|${node.server}|${node.port}`;
+        const key = `${node.type}|${node.name}|${node.server}|${node.port}`;
         if (!seen.has(key)) {
           seen.add(key);
           proxies.push(node);
@@ -152,7 +152,7 @@ export async function clashToLink(yamlText: string): Promise<ConvertResult> {
 }
 
 // ====================== clash-verge-rev 核心（完整 uri-parser）======================
-export default function parseUri(uri: string): IProxyConfig {
+export default function parseUri(uri: string): IProxyConfig | null {
   const head = uri.split("://")[0];
   switch (head) {
     case "ss":
@@ -311,7 +311,7 @@ function URI_SS(line: string): IProxyShadowsocksConfig {
   const serverAndPort = serverAndPortArray?.[1];
   const portIdx = serverAndPort?.lastIndexOf(":") ?? 0;
   proxy.server = serverAndPort?.substring(0, portIdx) ?? "";
-  proxy.port = parseInt(`${serverAndPort?.substring(portIdx + 1)}`.match(/\d+/)?.[0] ?? "");
+  proxy.port = parseInt(`${serverAndPort?.substring(portIdx + 1)}`.match(/\d+/)?.[0] ?? "0", 10);
   const userInfo = userInfoStr.match(/(^.*?):(.*$)/);
   proxy.cipher = getCipher(userInfo?.[1]);
   proxy.password = userInfo?.[2];
@@ -403,7 +403,7 @@ function URI_SSR(line: string): IProxyshadowsocksRConfig {
   return proxy;
 }
 
-function URI_VMESS(line: string): IProxyVmessConfig {
+function URI_VMESS(line: string): IProxyVmessConfig | null {
   line = line.split("vmess://")[1];
 
   // Strip #fragment before base64 decoding — some clients append #name to V2rayN URIs,
@@ -491,6 +491,10 @@ function URI_VMESS(line: string): IProxyVmessConfig {
 
     const server = params.add;
     const port = parseInt(getIfPresent(params.port), 10);
+    if (!server || isNaN(port)) {
+      console.warn("VMess node missing server or port, skipping");
+      return null;
+    }
     const proxy: IProxyVmessConfig = {
       name:
         trimStr(params.ps) ??
@@ -654,16 +658,16 @@ function URI_VLESS(line: string): IProxyVlessConfig {
 
   // TLS 处理
   proxy.tls = (params.security && params.security !== "none") || undefined;
-  if (isShadowrocket && /TRUE|1/i.test(params.tls || "")) {
+  if (isShadowrocket && /^(TRUE|1)$/i.test(params.tls || "")) {
     proxy.tls = true;
     params.security = params.security ?? "reality";
   }
 
   proxy.servername = params.sni || params.peer || undefined;
-  proxy.flow = params.flow ? "xtls-rprx-vision" : undefined;
+  proxy.flow = params.flow || undefined;
   proxy["client-fingerprint"] = params.fp as ClientFingerprint;
   proxy.alpn = params.alpn ? params.alpn.split(",").map((a) => a.trim()) : undefined;
-  proxy["skip-cert-verify"] = /(TRUE|1)/i.test(params.allowinsecure || params.allowInsecure || params["skip-cert-verify"] || "");
+  proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(params.allowinsecure || params.allowInsecure || params["skip-cert-verify"] || "");
 
   // Reality 参数
   if (params.security === "reality") {
@@ -775,7 +779,7 @@ function URI_Trojan(line: string): IProxyTrojanConfig {
         proxy["sni"] = value;
         break;
       case "skip-cert-verify":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
       case "fingerprint":
         proxy["fingerprint"] = value;
@@ -862,10 +866,10 @@ function URI_ANYTLS(line: string): IProxyConfig {
       case "skip-cert-verify":
       case "allowInsecure":
       case "allow_insecure":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
       case "udp":
-        proxy.udp = /(TRUE)|1/i.test(value);
+        proxy.udp = /^(TRUE|1)$/i.test(value);
         break;
       case "idle-session-check-interval":
         proxy["idle-session-check-interval"] = parseInt(value) || undefined;
@@ -958,7 +962,7 @@ function URI_Hysteria(line: string): IProxyHysteriaConfig {
   }
   const decodedName = trimStr(decodeURIComponent(nameRaw || ""));
 
-  const name = decodedName || `Hysteria ${server}:${port}`;
+  const name = decodedName || `Hysteria ${server}:${portNum}`;
 
   const proxy: IProxyHysteriaConfig = {
     type: "hysteria",
@@ -978,7 +982,7 @@ function URI_Hysteria(line: string): IProxyHysteriaConfig {
         break;
       case "insecure":
       case "skip-cert-verify":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
       case "auth":
         proxy["auth-str"] = value;
@@ -999,7 +1003,7 @@ function URI_Hysteria(line: string): IProxyHysteriaConfig {
         proxy["obfs"] = value || "";
         break;
       case "fast-open":
-        proxy["fast-open"] = /(TRUE)|1/i.test(value);
+        proxy["fast-open"] = /^(TRUE|1)$/i.test(value);
         break;
       case "peer":
         peerFallback = value;
@@ -1017,7 +1021,7 @@ function URI_Hysteria(line: string): IProxyHysteriaConfig {
         proxy["ca-str"] = value;
         break;
       case "disable-mtu-discovery":
-        proxy["disable-mtu-discovery"] = /(TRUE)|1/i.test(value);
+        proxy["disable-mtu-discovery"] = /^(TRUE|1)$/i.test(value);
         break;
       case "fingerprint":
         proxy["fingerprint"] = value;
@@ -1033,6 +1037,7 @@ function URI_Hysteria(line: string): IProxyHysteriaConfig {
     }
   }
   if (!proxy.sni && peerFallback) proxy.sni = peerFallback;
+  if (peerFallback && peerFallback !== proxy.sni) proxy.peer = peerFallback;
 
   if (!proxy.protocol) {
     proxy.protocol = "udp";
@@ -1083,10 +1088,10 @@ function URI_TUIC(line: string): IProxyTuicConfig {
         proxy["alpn"] = value ? value.split(",") : undefined;
         break;
       case "disable-sni":
-        proxy["disable-sni"] = /(TRUE)|1/i.test(value);
+        proxy["disable-sni"] = /^(TRUE|1)$/i.test(value);
         break;
       case "reduce-rtt":
-        proxy["reduce-rtt"] = /(TRUE)|1/i.test(value);
+        proxy["reduce-rtt"] = /^(TRUE|1)$/i.test(value);
         break;
       case "request-timeout":
         proxy["request-timeout"] = parseInt(value);
@@ -1101,10 +1106,10 @@ function URI_TUIC(line: string): IProxyTuicConfig {
         proxy["max-udp-relay-packet-size"] = parseInt(value);
         break;
       case "fast-open":
-        proxy["fast-open"] = /(TRUE)|1/i.test(value);
+        proxy["fast-open"] = /^(TRUE|1)$/i.test(value);
         break;
       case "skip-cert-verify":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
       case "max-open-streams":
         proxy["max-open-streams"] = parseInt(value);
@@ -1113,7 +1118,7 @@ function URI_TUIC(line: string): IProxyTuicConfig {
         proxy["sni"] = value;
         break;
       case "allow-insecure":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
     }
   }
@@ -1183,7 +1188,7 @@ function URI_Wireguard(line: string): IProxyWireguardConfig {
         }
         break;
       case "udp":
-        proxy["udp"] = /(TRUE)|1/i.test(value);
+        proxy["udp"] = /^(TRUE|1)$/i.test(value);
         break;
       case "mtu":
         proxy.mtu = parseInt(value.trim(), 10);
@@ -1192,7 +1197,7 @@ function URI_Wireguard(line: string): IProxyWireguardConfig {
         proxy["dialer-proxy"] = value;
         break;
       case "remote-dns-resolve":
-        proxy["remote-dns-resolve"] = /(TRUE)|1/i.test(value);
+        proxy["remote-dns-resolve"] = /^(TRUE|1)$/i.test(value);
         break;
       case "dns":
         proxy.dns = value.split(",");
@@ -1240,13 +1245,13 @@ function URI_HTTP(line: string): IProxyHttpConfig {
     value = decodeURIComponent(value);
     switch (key) {
       case "tls":
-        proxy.tls = /(TRUE)|1/i.test(value);
+        proxy.tls = /^(TRUE|1)$/i.test(value);
         break;
       case "fingerprint":
         proxy["fingerprint"] = value;
         break;
       case "skip-cert-verify":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
       case "ip-version":
         if (["dual", "ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"].includes(value)) {
@@ -1298,16 +1303,16 @@ function URI_SOCKS(line: string): IProxySocks5Config {
     value = decodeURIComponent(value);
     switch (key) {
       case "tls":
-        proxy.tls = /(TRUE)|1/i.test(value);
+        proxy.tls = /^(TRUE|1)$/i.test(value);
         break;
       case "fingerprint":
         proxy["fingerprint"] = value;
         break;
       case "skip-cert-verify":
-        proxy["skip-cert-verify"] = /(TRUE)|1/i.test(value);
+        proxy["skip-cert-verify"] = /^(TRUE|1)$/i.test(value);
         break;
       case "udp":
-        proxy["udp"] = /(TRUE)|1/i.test(value);
+        proxy["udp"] = /^(TRUE|1)$/i.test(value);
         break;
       case "ip-version":
         if (["dual", "ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"].includes(value)) {
@@ -1558,6 +1563,7 @@ export function generateUri(node: any): string {
     }
 
     default:
+      console.warn(`Unknown proxy type: ${node.type}`);
       return "";
   }
 }

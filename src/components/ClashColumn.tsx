@@ -102,7 +102,7 @@ export function ClashColumn({
         <div className={styles.controls}>
           <Button
             icon={<ClipboardPasteRegular />}
-            onClick={() => handlePaste(onChange, setPasteText)}
+            onClick={() => handlePaste(value, onChange, setPasteText)}
           >
             {pasteText}
           </Button>

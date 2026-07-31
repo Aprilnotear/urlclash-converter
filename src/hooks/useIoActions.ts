@@ -17,12 +17,13 @@ export function useIoActions() {
   };
 
   const handlePaste = async (
+    currentValue: string,
     setter: (val: string) => void,
     buttonSetter: (text: string) => void,
   ) => {
     try {
       const text = await navigator.clipboard.readText();
-      setter(text);
+      setter(currentValue ? currentValue + "\n" + text : text);
       buttonSetter(t("pasted"));
       setTimeout(() => buttonSetter(t("paste")), 800);
     } catch {
@@ -53,15 +54,22 @@ export function useIoActions() {
   ) => {
     if (!url.trim()) return;
     setFetching(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     try {
-      const res = await fetch(url.trim());
+      const res = await fetch(url.trim(), { signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setter(await res.text());
       setShow(false);
       setUrl("");
     } catch (err: any) {
-      alert(`${t("fetchFailed")}: ${err.message || err}`);
+      if (err.name === "AbortError") {
+        alert(t("fetchTimeout"));
+      } else {
+        alert(`${t("fetchFailed")}: ${err.message || err}`);
+      }
     } finally {
+      clearTimeout(timeoutId);
       setFetching(false);
     }
   };

@@ -62,6 +62,7 @@
     const host = hostname.toLowerCase();
     const mappedIPv4 = extractMappedIPv4FromIPv6(host);
     if (mappedIPv4 && isPrivateIPv4(mappedIPv4)) return true;
+    if (!host.includes(':')) return false;
     return host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe8') || host.startsWith('fe9') || host.startsWith('fea') || host.startsWith('feb');
   };
 

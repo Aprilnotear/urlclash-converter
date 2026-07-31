@@ -106,10 +106,16 @@ function AppContent({
 }
 
 export default function App() {
-  const systemPrefersDark =
-    window.matchMedia &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const [isDark, setIsDark] = useState(systemPrefersDark);
+  const [isDark, setIsDark] = useState(() => {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   return (
     <FluentProvider theme={isDark ? webDarkTheme : webLightTheme}>

@@ -19,7 +19,8 @@ import {
   ArrowDownloadRegular,
 } from "@fluentui/react-icons";
 import { useTranslation } from "react-i18next";
-import { setParser, clashToLink } from "../converter";
+import { setParser } from "../converter";
+import { getPyodide } from "../pyyaml";
 import { useIoActions } from "../hooks/useIoActions";
 import { UrlBar } from "./UrlBar";
 import { EngineSwitcher } from "./EngineSwitcher";
@@ -102,7 +103,7 @@ export function LinksColumn({
     if (checked) {
       setPyLoading(true);
       try {
-        await clashToLink(clashValue.trim() || "proxies: []");
+        await getPyodide();
       } finally {
         setPyLoading(false);
       }
@@ -121,7 +122,7 @@ export function LinksColumn({
         <div className={styles.controls}>
           <Button
             icon={<ClipboardPasteRegular />}
-            onClick={() => handlePaste(onChange, setPasteText)}
+            onClick={() => handlePaste(value, onChange, setPasteText)}
           >
             {pasteText}
           </Button>
